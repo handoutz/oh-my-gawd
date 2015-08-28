@@ -1,0 +1,77 @@
+var oa2lib = require("oauth20-provider"),
+    redis = require('redis'),
+    _log = global.createLogger('oauth2-provider');
+module.exports = function (app, passport) {
+    var oa2 = new oa2lib({log: {level: 2}});
+    var model = require('../oauth2/redis').oauth2;
+
+    function isLoggedIn(req, res, next) {
+        if (req.isAuthenticated()) {
+            return next();
+        }
+        req.flash('loginMessage', 'Must be logged in to do that action');
+        res.redirect('/login');
+    }
+
+
+    app.use(oa2.inject());
+
+    oa2.model.client.getId = model.client.getId;
+    oa2.model.client.getRedirectUri = model.client.getRedirectUri;
+    oa2.model.client.fetchById = model.client.fetchById;
+    oa2.model.client.checkSecret = model.client.checkSecret;
+
+    // User
+    oa2.model.user.getId = model.user.getId;
+    oa2.model.user.fetchById = model.user.fetchById;
+    oa2.model.user.fetchByUsername = model.user.fetchByUsername;
+    oa2.model.user.fetchFromRequest = model.user.fetchFromRequest;
+    oa2.model.user.checkPassword = model.user.checkPassword;
+
+    // Refresh token
+    oa2.model.refreshToken.getUserId = model.refreshToken.getUserId;
+    oa2.model.refreshToken.getClientId = model.refreshToken.getClientId;
+    oa2.model.refreshToken.getScope = model.refreshToken.getScope;
+    oa2.model.refreshToken.fetchByToken = model.refreshToken.fetchByToken;
+    oa2.model.refreshToken.removeByUserIdClientId = model.refreshToken.removeByUserIdClientId;
+    oa2.model.refreshToken.create = model.refreshToken.create;
+
+    // Access token
+    oa2.model.accessToken.getToken = model.accessToken.getToken;
+    oa2.model.accessToken.fetchByToken = model.accessToken.fetchByToken;
+    oa2.model.accessToken.checkTTL = model.accessToken.checkTTL;
+    oa2.model.accessToken.getTTL = model.accessToken.getTTL;
+    oa2.model.accessToken.fetchByUserIdClientId = model.accessToken.fetchByUserIdClientId;
+    oa2.model.accessToken.create = model.accessToken.create;
+
+    // Code
+    oa2.model.code.create = model.code.create;
+    oa2.model.code.fetchByCode = model.code.fetchByCode;
+    oa2.model.code.removeByCode = model.code.removeByCode;
+    oa2.model.code.getUserId = model.code.getUserId;
+    oa2.model.code.getClientId = model.code.getClientId;
+    oa2.model.code.getScope = model.code.getScope;
+    oa2.model.code.checkTTL = model.code.getScope;
+
+    oa2.decision = function (req, res, client, scope, user) {
+        res.render('pages/profile.ejs', {
+            user: req.user,
+            client: client,
+            scope: scope.length == 0 ? ["all"] : scope,
+            message: req.flash('messages'),
+            _show_auth_dialog: true
+        });
+    };
+
+    app.get('/oauth/authorize', isLoggedIn, oa2.controller.authorization, function (req, res) {
+        _log.info("oauth authorize3");
+        res.json({a:'b'});
+        //res.render('views/dialog/oauth_authorize.ejs');
+    });
+    app.post('/oauth/authorize', isLoggedIn, oa2.controller.authorization, function (req, res) {
+        _log.info(res.body);
+    });
+
+    app.post('/oauth/token', oa2.controller.token);
+
+};
