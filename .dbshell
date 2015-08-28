@@ -1,5 +1,0 @@
-show databases
-show collections
-db.users.find()
-it
-db.users.find({"local.email": "innatepirate@gmail.com"})
