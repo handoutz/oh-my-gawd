@@ -1,0 +1,3 @@
+Bundle 'unite.vim'
+Bundle 'vimproc.vim'
+Bundle 'vimfiler.vim'

@@ -1,0 +1,17 @@
+.cache
+.bash_history
+.npm/
+.gvimrc
+oh-my-gawd/
+spf13/
+.ssh/
+tmp/
+.tmux.conf
+unite.vim/
+vim/
+./vimrc
+./vimrc.before
+./vimrc.after
+./vimswap/
+.vimundo/
+.vimviews

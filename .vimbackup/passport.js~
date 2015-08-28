@@ -1,0 +1,202 @@
+// config/passport.js
+
+// load all the things we need
+var LocalStrategy = require('passport-local').Strategy,
+    Basic = require('passport-http').BasicStrategy,
+    Custom = require('passport-custom').Strategy,
+    debug = require('debug')('neutun:passport'),
+    _ = require('underscore'),
+    uid = require('uid-safe'),
+    crypto = require('crypto'),
+    Token = require('../app/models/persistent_token'),
+    RememberMeStrategy = require('passport-remember-me').Strategy,
+    TokenStrategy = require('passport-token').Strategy;
+
+// load up the user model
+var User = require('../app/models/user');
+var _log = global.createLogger('passport');
+// expose this function to our app using module.exports
+module.exports = function (app, passport) {
+    // =========================================================================
+    // passport session setup ==================================================
+    // =========================================================================
+    // required for persistent login sessions
+    // passport needs ability to serialize and unserialize users out of session
+
+    // used to serialize the user for the session
+    passport.serializeUser(function (user, done) {
+        _log.trace("serialized user id %s", user._id);
+        done(null, user._id);
+    });
+
+    // used to deserialize the user
+    passport.deserializeUser(function (id, done) {
+        _log.trace("deserializing user %s",id);
+        User.findById(id, function (err, usr) {
+            if (err)return done(err, null);
+            done(null, usr);
+        })
+    });
+
+    var bearerSecret = "Ac/VIbUPI9yAE0mLfsiILKoCYm+ACUfzmhkgxR2SFfSk+FLhCdHgKap6I0dHCb2f2WHEuRfo9m39Wtwf9TLkfg";
+
+    passport.use('custom-login', new Custom(function (req, done) {
+        var email = req.param('email'),
+            pw = req.param('password');
+        User.findOne({"local.email": email}, function (err, usr) {
+            if (err)return done(err);
+            if (!usr){
+                _log.debug("could not find user with email %s", email);
+                return done(null, false, req.flash('loginMessage', 'Invalid credentials, please try again.'));
+            }
+            if (!usr.validPassword(pw))return done(null, false, req.flash('loginMessage', 'Invalid credentials, please try again.'));
+            req.session.user = usr;
+            req.session.authorized = true;
+            req.user = usr;
+            if (_.isEmpty(usr.bearerToken)) {
+                usr.bearerToken = crypto.createHmac('sha256', bearerSecret).update((Date.now() * Math.random() * 1000).toString()).digest('hex');
+                usr.save(function (err) {
+                    if (err)return done(err);
+                });
+            }
+
+            return done(null, usr);
+        });
+    }));
+
+    // =========================================================================6
+    // LOCAL SIGNUP ============================================================
+    // =========================================================================
+    // we are using named strategies since we have one for login and one for signup
+    // by default, if there was no name, it would just be called 'local'
+    passport.use('autodo', new LocalStrategy(
+        {
+            usernameField: 'email', passwordField: 'password',
+            passReqToCallback: true
+        },
+        function (req, email, password, done) {
+            User.findOne({'local.email': email}, function (err, user) {
+                // if there are any errors, return the error before anything else
+                if (err) {
+                    return done(err);
+                }
+
+                // if no user is found, return the message
+                if (!user) {
+                    return done(null, false, req.flash('loginMessage', 'No user found.')); // req.flash is the way to set flashdata using connect-flash
+                }
+
+                // if the user is found but the password is wrong
+                if (!user.validPassword(password)) {
+                    return done(null, false, req.flash('loginMessage', 'Oops! Wrong password.')); // create the loginMessage and save it to session as flashdata
+                }
+                // all is well, return successful user
+                return done(null, user);
+            });
+        }));
+    passport.use('local-login', new LocalStrategy({
+        usernameField: 'email',
+        passwordField: 'password',
+        passReqToCallback: true
+    }, function (req, email, password, done) { // callback with email and password from our form
+        // find a user whose email is the same as the forms email
+        // we are checking to see if the user trying to login already exists
+        //debug("user trying to sign up with this email: " + email);
+        User.findOne({'local.email': email}, function (err, user) {
+            // if there are any errors, return the error before anything else
+            if (err) {
+                return done(err);
+            }
+
+            // if no user is found, return the message
+            if (!user) {
+                return done(null, false, req.flash('loginMessage', 'No user found.')); // req.flash is the way to set flashdata using connect-flash
+            }
+
+            // if the user is found but the password is wrong
+            if (!user.validPassword(password)) {
+                return done(null, false, req.flash('loginMessage', 'Oops! Wrong password.')); // create the loginMessage and save it to session as flashdata
+            }
+            debug("user signed up with this email: " + email);
+            // all is well, return successful user
+            return done(null, user);
+        });
+    }));
+
+    passport.use('local-signup', new LocalStrategy({
+        // by default, local strategy uses username and password, we will override with email
+        usernameField: 'email',
+        passwordField: 'password',
+        passReqToCallback: true // allows us to pass back the entire request to the callback
+    }, function (req, email, password, done) {
+        // asynchronous
+        // User.findOne wont fire unless data is sent back
+
+        process.nextTick(function () {
+            // find a user whose email is the same as the forms email
+            // we are checking to see if the user trying to login already exists
+            User.findOne({'local.email': email}, function (err, user) {
+                // if there are any errors, return the error
+                if (err) {
+                    return done(err);
+                }
+
+                // check to see if theres already a user with that email
+                if (user) {
+                    return done(null, false, req.flash('signupMessage', 'That email is already taken.'));
+                } else {
+                    // if there is no user with that email
+                    // create the user
+                    var newUser = new User();
+
+                    // set the user's local credentials
+                    newUser.local.username = req.body.username;
+                    newUser.local.email = email;
+                    newUser.local.givenName = req.body.firstName;
+                    newUser.local.familyName = req.body.lastName;
+                    newUser.local.dateOfBirth = req.body.dateOfBirth;
+                    newUser.local.country = req.body.country;
+                    newUser.local.stateOrProvince = req.body.stateOrProvince;
+                    newUser.local.gender = req.body.gender;
+                    newUser.local.password = newUser.generateHash(password);
+                    /*if (_.any(_.values(newUser.local, function (v, k) {
+                     var res = _.isNull(v) || _.isUndefined(v) || _.isEmpty(v);
+                     console.log(k + ": " + v + " was " + res);
+                     return res;
+                     }))) {
+                     return done(null, false, req.flash('signupMessage', 'A field was empty, try again'))
+                     }*/
+
+                    // save the user
+                    newUser.save(function (err) {
+                        if (err)
+                            throw err;
+                        return done(null, newUser);
+                    });
+                }
+            });
+        });
+    }));
+
+    // Handler to log users in for requests from the Pebble
+    passport.use('pebble-request', new TokenStrategy({
+        usernameHeader: 'x-Account-Token',
+        tokenHeader: 'x-Pebble-Token'
+    }, function (accountToken, watchToken, done) {
+        User.findOne({
+            'pebble.watch_token': watchToken,
+            'pebble.account_token': accountToken
+        }, function (err, user) {
+            if (err) {
+                return done(err);
+            }
+
+            return done(null, user);
+        });
+    }));
+
+    // Ftbit API integration
+    app.apis = {
+        fitbit: require('./apis/fitbit.js')(app, passport)
+    };
+};
