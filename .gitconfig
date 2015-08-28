@@ -1,2 +1,4 @@
 [status]
 	submoduleSummary = true
+[push]
+	default = matching
