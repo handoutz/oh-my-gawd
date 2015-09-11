@@ -1,7 +1,17 @@
 #!/bin/bash
 
-sudo dnf install vim git curl vim-jedi vim-filesystem vim-plugin-powerline vim-omnicppcomplete tmux
+sudo dnf install vim git curl vim-jedi vim-filesystem vim-plugin-powerline vim-omnicppcomplete tmux zsh wget
+
+sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+
+
+
 curl https://j.mp/spf13-vim3 -L > spf13-vim.sh && sh spf13-vim.sh
+
+echo -e "Bundle 'unite.vim'" >> .vimrc.local
+echo -e "Bundle 'vimproc.vim'" >> .vimrc.local
+echo -e "Bundle 'vimfiler.vim'" >> .vimrc.local
+
 
 echo -e "#" >> .tmuxrc
 echo -e "#############################" >> .tmuxrc
